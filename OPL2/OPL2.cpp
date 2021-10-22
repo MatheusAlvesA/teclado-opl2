@@ -60,23 +60,15 @@ OPL2::OPL2() {/* empty */}
  * Initialize the YM3812. This function is deprecated and should be replaced with OPL2.begin().
  */
 void OPL2::init() {
-	pinMode(A0, OUTPUT);
-    pinMode(D0, OUTPUT);
-    pinMode(D1, OUTPUT);
-    pinMode(D2, OUTPUT);
-    pinMode(D3, OUTPUT);
-    pinMode(D4, OUTPUT);
-    pinMode(D5, OUTPUT);
-    pinMode(D6, OUTPUT);
-    pinMode(D7, OUTPUT);
-	pinMode(WR, OUTPUT);
-	pinMode(RESET, OUTPUT);
-	digitalWrite(RESET, HIGH);
-	digitalWrite(A0, LOW);
-	digitalWrite(WR, HIGH);
-    delayMicroseconds(10);
+	pinMode(SHIFT_SER, OUTPUT);
+	pinMode(SHIFT_CLOCK, OUTPUT);
+	pinMode(SHIFT_LATCH, OUTPUT);
+	digitalWrite(SHIFT_LATCH, LOW);
+	digitalWrite(SHIFT_CLOCK, HIGH);
+	digitalWrite(SHIFT_SER, HIGH);
 
 	createShadowRegisters();
+	updateShiftRegisters();
 	reset();
 }
 
@@ -90,6 +82,9 @@ void OPL2::createShadowRegisters() {
 	chipRegisters = new byte[3];					//  3
 	channelRegisters = new byte[3 * OPL2_NUM_CHANNELS];	// 27
 	operatorRegisters = new byte[10 * OPL2_NUM_CHANNELS];	// 90
+	shiftRegisterData = 
+				  (1 << RESET_BIT) | // Desativa reset
+				  (1 << WR_BIT);     // Desativa escrita
 }
 
 
@@ -99,9 +94,11 @@ void OPL2::createShadowRegisters() {
  */
 void OPL2::reset() {
 	// Hard reset the OPL2.
-	digitalWrite(RESET, LOW);
+	shiftRegisterData &= ~(1 << RESET_BIT);
+	updateShiftRegisters();
 	delay(1);
-	digitalWrite(RESET, HIGH);
+	shiftRegisterData |= (1 << RESET_BIT);
+	updateShiftRegisters();
 
 	// Initialize chip registers.
 	setChipRegister(0x00, 0x00);
@@ -292,45 +289,38 @@ byte OPL2::getRegisterOffset(byte channel, byte operatorNum) {
  * @param value - The value to write to the register.
  */
 void OPL2::write(byte reg, byte value) {
-      digitalWrite(A0, LOW);  // Escrever endereço
-	  PORTD = (reg << 2) | (0b00000011 & PORTD);
-	  PORTB = (reg >> 6) | (0b11111100 & PORTB);
+	shiftRegisterData &= ~(1 << A0_BIT); // Escrever endereço
+	updateShiftRegisters();
 
-	  digitalWrite(WR, LOW);  // Ativa a escrita
-	  delayMicroseconds(1);
-	  digitalWrite(WR, HIGH);  // Desativa a escrita
+	// Escreve endereço no byte de dados dos shiftregisters
+	shiftRegisterData = (shiftRegisterData & 0xFF00) | reg;
+	updateShiftRegisters();
 
-/*
-      digitalWrite(D0, (reg & 0b00000001) ? HIGH : LOW);
-      digitalWrite(D1, (reg & 0b00000010) ? HIGH : LOW);
-      digitalWrite(D2, (reg & 0b00000100) ? HIGH : LOW);
-      digitalWrite(D3, (reg & 0b00001000) ? HIGH : LOW);
-      digitalWrite(D4, (reg & 0b00010000) ? HIGH : LOW);
-      digitalWrite(D5, (reg & 0b00100000) ? HIGH : LOW);
-      digitalWrite(D6, (reg & 0b01000000) ? HIGH : LOW);
-      digitalWrite(D7, (reg & 0b10000000) ? HIGH : LOW);
-*/
-	
-	  digitalWrite(A0, HIGH);  // Escrever dados
-	  PORTD = (value << 2) | (0b00000011 & PORTD);
-	  PORTB = (value >> 6) | (0b11111100 & PORTB);
+	shiftRegisterData &= ~(1 << WR_BIT);  // Ativa a escrita
+	updateShiftRegisters();
+	shiftRegisterData |= (1 << WR_BIT);  // Desativa a escrita
+	updateShiftRegisters();
 
-	  digitalWrite(WR, LOW);   // Ativa a escrita
-      delayMicroseconds(1);
-	  digitalWrite(WR, HIGH);  // Desativa a escrita
-	  delayMicroseconds(1);
-/*
-      digitalWrite(D0, (value & 0b00000001) ? HIGH : LOW);
-      digitalWrite(D1, (value & 0b00000010) ? HIGH : LOW);
-      digitalWrite(D2, (value & 0b00000100) ? HIGH : LOW);
-      digitalWrite(D3, (value & 0b00001000) ? HIGH : LOW);
-      digitalWrite(D4, (value & 0b00010000) ? HIGH : LOW);
-      digitalWrite(D5, (value & 0b00100000) ? HIGH : LOW);
-      digitalWrite(D6, (value & 0b01000000) ? HIGH : LOW);
-      digitalWrite(D7, (value & 0b10000000) ? HIGH : LOW);
-*/
+
+	shiftRegisterData |= (1 << A0_BIT);  // Escrever dados
+	updateShiftRegisters();
+
+	// Escreve valor no byte de dados dos shiftregisters
+	shiftRegisterData = (shiftRegisterData & 0xFF00) | value;
+	updateShiftRegisters();
+
+	shiftRegisterData &= ~(1 << WR_BIT);  // Ativa a escrita
+	updateShiftRegisters();
+	shiftRegisterData |= (1 << WR_BIT);  // Desativa a escrita
+	updateShiftRegisters();
 }
 
+void OPL2::updateShiftRegisters() {
+	shiftOut(SHIFT_SER, SHIFT_CLOCK, MSBFIRST, (byte)(shiftRegisterData & 0xFF));
+	shiftOut(SHIFT_SER, SHIFT_CLOCK, MSBFIRST, (byte)(shiftRegisterData >> 8));
+	digitalWrite(SHIFT_LATCH, HIGH);
+	digitalWrite(SHIFT_LATCH, LOW);
+}
 
 /**
  * Return the number of channels for this OPL2.

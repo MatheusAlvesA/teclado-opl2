@@ -47,19 +47,19 @@
 	#define NUM_OCTAVES      7
 	#define NUM_NOTES       12
 	#define NUM_DRUM_SOUNDS  5
+	
+	// Definindo os bits de controle do OPL nos shift registers
+	#define A0_BIT 15    // Definindo o bit de endereço
+	#define RESET_BIT 14 // Definindo bit de Reset do YM3812
+	#define WR_BIT 13    // Definindo bit de Write e Chip Select
 
-	#define A0 13 // Definindo o pino de endereço como 13
-	#define RESET 12 // Definindo pino de Reset do YM3812
-	#define WR 11 // Definindo pino de Write e Chip Select
-	// Ligando pinos de dados do YM3812 aos digitais do Arduino(ATMEGA328)
-	#define D0 2
-	#define D1 3
-	#define D2 4
-	#define D3 5
-	#define D4 6
-	#define D5 7
-	#define D6 8
-	#define D7 9
+	// Definindo pinos dos shift registers
+	#define SHIFT_SER 11
+	#define SHIFT_CLOCK 12
+	#define SHIFT_LATCH 13
+
+	#define MAX_OPL_VOL 63 // Volume máximo no registrador do OPL (6 bits)
+	#define MAX_OPL_ENV 15 // Valor máximo de envelope suportado pelo OPL (4 bits)
 
 	#include <Arduino.h>
 
@@ -105,6 +105,7 @@
 			byte getChannelRegisterOffset(byte baseRegister, byte channel);
 			short getOperatorRegisterOffset(byte baseRegister, byte channel, byte operatorNum);
 			void write(byte reg, byte data);
+			void updateShiftRegisters();
 
 			byte getNumChannels();
 
@@ -179,6 +180,7 @@
 			byte* chipRegisters;
 			byte* channelRegisters;
 			byte* operatorRegisters;
+			uint16_t shiftRegisterData;
 
 			const float fIntervals[8] = {
 				0.048, 0.095, 0.190, 0.379, 0.759, 1.517, 3.034, 6.069
